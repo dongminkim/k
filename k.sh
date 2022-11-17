@@ -87,13 +87,12 @@ k () {
   fi
 
   # Check which numfmt available (if any), warn user if not available
-  typeset -i numfmt_available=0
-  typeset -i gnumfmt_available=0
+  typeset numfmt_cmd
   if [[ "$o_human" != "" ]]; then
     if [[ $+commands[numfmt] == 1 ]]; then
-      numfmt_available=1
+      numfmt_cmd=numfmt
     elif [[ $+commands[gnumfmt] == 1 ]]; then
-      gnumfmt_available=1
+      numfmt_cmd=gnumfmt
     else
       print -u2 "'numfmt' or 'gnumfmt' command not found, human readable output will not work."
       print -u2 "\tFalling back to normal file size output"
@@ -105,17 +104,9 @@ k () {
   # Create numfmt local function
   numfmt_local () {
     if [[ "$o_si" != "" ]]; then
-      if (( $numfmt_available )); then
-        numfmt --to=si $1
-      elif (( $gnumfmt_available )); then
-        gnumfmt --to=si $1
-      fi
+      $numfmt_cmd --to=si "$@"
     else
-      if (( $numfmt_available )); then
-        numfmt --to=iec $1
-      elif (( $gnumfmt_available )); then
-        gnumfmt --to=iec $1
-      fi
+      $numfmt_cmd --to=iec "$@"
     fi
   }
 
@@ -288,6 +279,8 @@ k () {
     typeset -a STATS_PARAMS_LIST
     typeset fn statvar h
     typeset -A sv
+    typeset -a fs
+    typeset -A sz
 
     STATS_PARAMS_LIST=()
     for fn in $show_list
@@ -296,9 +289,17 @@ k () {
       typeset -A $statvar
       zstat -H $statvar -Lsn -F "%s^%d^%b^%H:%M^%Y" -- "$fn"  # use lstat, render mode/uid/gid to strings
       STATS_PARAMS_LIST+=($statvar)
+      if [[ "$o_human" != "" ]]; then
+        sv=("${(@Pkv)statvar}")
+        fs+=("${sv[size]}")
+      fi
       i+=1
     done
 
+    if [[ "$o_human" != "" ]]; then
+      fs=($( printf "%s\n" "${fs[@]}" | numfmt_local ))
+      i=1
+    fi
 
     # On each result calculate padding by getting max length on each array member
     for statvar in "${STATS_PARAMS_LIST[@]}"
@@ -310,11 +311,12 @@ k () {
       if [[ ${#sv[gid]}   -gt $MAX_LEN[4] ]]; then MAX_LEN[4]=${#sv[gid]}   ; fi
 
       if [[ "$o_human" != "" ]]; then
-        h=$(numfmt_local ${sv[size]})
-        if (( ${#h} > $MAX_LEN[5] )); then MAX_LEN[5]=${#h}; fi
+        h="${fs[$(( i++ ))]}"
       else
-        if [[ ${#sv[size]} -gt $MAX_LEN[5] ]]; then MAX_LEN[5]=${#sv[size]}; fi
+        h="${sv[size]}"
       fi
+      sz[${sv[name]}]="$h"
+      if (( ${#h} > $MAX_LEN[5] )); then MAX_LEN[5]=${#h}; fi
 
       TOTAL_BLOCKS+=$sv[blocks]
     done
@@ -359,6 +361,7 @@ k () {
                OWNER="${sv[uid]}"
                GROUP="${sv[gid]}"
             FILESIZE="${sv[size]}"
+        FILESIZE_OUT="${sz[${sv[name]}]}"
                 DATE=(${(s:^:)sv[mtime]}) # Split date on ^
                 NAME="${sv[name]}"
       SYMLINK_TARGET="${sv[link]}"
@@ -395,15 +398,6 @@ k () {
           IS_GIT_REPO=0
         fi
         builtin cd -q - >/dev/null
-      fi
-
-      # Get human readable output if necessary
-      if [[ "$o_human" != "" ]]; then
-        # I hate making this call twice, but its either that, or do a bunch
-        # of calculations much earlier.
-        FILESIZE_OUT=$(numfmt_local $FILESIZE)
-      else
-        FILESIZE_OUT=$FILESIZE
       fi
 
       # Pad so all the lines align - firstline gets padded the other way
