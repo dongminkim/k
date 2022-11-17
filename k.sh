@@ -119,13 +119,29 @@ k () {
   # Setup array of directories to print
   typeset -a base_dirs
   typeset base_dir
+  typeset -A white_list
+  typeset -a base_show_list
 
-  if [[ "$@" == "" ]]; then
-    base_dirs=.
+  if [[ $# -gt 0 ]]; then
+    if [[ "$o_directory" == "" ]]; then
+      for (( i=1; i <= $#; i++ )); do
+        p="${@[$i]}"
+        if [[ -d "$p" ]]; then
+          base_dirs+=("$p")
+        else
+          if [ "${base_dirs[1]}" != "." ]; then
+            base_dirs=(. "${base_dirs[@]}")
+          fi
+          base_show_list+=("$p")
+        fi
+      done
+    else
+      base_dirs=(.)
+      base_show_list=("$@")
+    fi
   else
-    base_dirs=($@)
+    base_dirs=(.)
   fi
-
 
   # Colors
   # ----------------------------------------------------------------------------
@@ -177,7 +193,10 @@ k () {
       if [[ "$base_dir" != "${base_dirs[1]}" ]]; then
         print
       fi
-      print -r "${base_dir}:"
+
+      if ! [[ "$base_dir" == "." && ${#base_show_list} -gt 0 ]]; then
+        print -r "${base_dir}:"
+      fi
     fi
     # ----------------------------------------------------------------------------
     # Vars
@@ -232,42 +251,46 @@ k () {
     # Build up list of files/directories to show
     # ----------------------------------------------------------------------------
 
-    typeset -a show_list
-    show_list=()
-
-    # Check if it even exists
-    if [[ ! -e $base_dir ]]; then
-      print -u2 "k: cannot access $base_dir: No such file or directory"
-
-    # If its just a file, skip the directory handling
-    elif [[ -f $base_dir ]]; then
-      show_list=($base_dir)
-
-    #Directory, add its contents
+    if [[ "$base_dir" == "." && ${#base_show_list} -gt 0 ]]; then
+      show_list=("${base_show_list[@]}")
     else
-      # Break total blocks of the front of the stat call, then push the rest to results
-      if [[ "$o_all" != "" && "$o_almost_all" == "" && "$o_no_directory" == "" ]]; then
-        show_list+=($base_dir/.)
-        show_list+=($base_dir/..)
-      fi
+      show_list=()
 
-      if [[ "$o_all" != "" || "$o_almost_all" != "" ]]; then
-        if [[ "$o_directory" != "" ]]; then
-          show_list+=($base_dir/*(D/$SORT_GLOB))
-        elif [[ "$o_no_directory" != "" ]]; then
-          #Use (^/) instead of (.) so sockets and symlinks get displayed
-          show_list+=($base_dir/*(D^/$SORT_GLOB))
-        else
-          show_list+=($base_dir/*(D$SORT_GLOB))
-        fi
+      # Check if it even exists
+      if [[ ! -e $base_dir ]]; then
+        print -u2 "k: cannot access $base_dir: No such file or directory"
+
+      # If its just a file, skip the directory handling
+      elif [[ -f $base_dir ]]; then
+        show_list=($base_dir)
+
+      #Directory, add its contents
       else
-        if [[ "$o_directory" != "" ]]; then
-          show_list+=($base_dir/*(/$SORT_GLOB))
-        elif [[ "$o_no_directory" != "" ]]; then
-          #Use (^/) instead of (.) so sockets and symlinks get displayed
-          show_list+=($base_dir/*(^/$SORT_GLOB))
+        # Break total blocks of the front of the stat call, then push the rest to results
+        if [[ "$o_all" != "" && "$o_almost_all" == "" && "$o_no_directory" == "" ]]; then
+          show_list+=($base_dir/.)
+          show_list+=($base_dir/..)
+        fi
+
+        if [[ "$o_all" != "" || "$o_almost_all" != "" ]]; then
+          if [[ "$o_directory" != "" ]]; then
+            show_list+=($base_dir/*(D/$SORT_GLOB))
+          elif [[ "$o_no_directory" != "" ]]; then
+            #Use (^/) instead of (.) so sockets and symlinks get displayed
+            show_list+=($base_dir/*(D^/$SORT_GLOB))
+          else
+            show_list+=($base_dir/*(D$SORT_GLOB))
+          fi
         else
-          show_list+=($base_dir/*($SORT_GLOB))
+          if [[ "$o_directory" != "" ]]; then
+            #show_list+=($base_dir/*(/$SORT_GLOB))
+            show_list+=($base_dir)
+          elif [[ "$o_no_directory" != "" ]]; then
+            #Use (^/) instead of (.) so sockets and symlinks get displayed
+            show_list+=($base_dir/*(^/$SORT_GLOB))
+          else
+            show_list+=($base_dir/*($SORT_GLOB))
+          fi
         fi
       fi
     fi
@@ -276,13 +299,12 @@ k () {
     # Stat call to get directory listing
     # ----------------------------------------------------------------------------
     typeset -i i=1 j=1 k=1
-    typeset -a STATS_PARAMS_LIST
+    typeset -a STATS_PARAMS_LIST=()
     typeset fn statvar h
-    typeset -A sv
-    typeset -a fs
-    typeset -A sz
+    typeset -A sv=()
+    typeset -a fs=()
+    typeset -A sz=()
 
-    STATS_PARAMS_LIST=()
     for fn in $show_list
     do
       statvar="stats_$i"
@@ -322,7 +344,9 @@ k () {
     done
 
     # Print total block before listing
-    echo "total $TOTAL_BLOCKS"
+    if ! [[ "$base_dir" == "." && ${#base_show_list} -gt 0 ]]; then
+      echo "total $TOTAL_BLOCKS"
+    fi
 
     # ----------------------------------------------------------------------------
     # Loop through each line of stat, pad where appropriate and do git dirty checking
@@ -514,7 +538,7 @@ k () {
       # --------------------------------------------------------------------------
       # Unfortunately, the choices for quoting which escape ANSI color sequences are q & qqqq; none of q- qq qqq work.
       # But we don't want to quote '.'; so instead we escape the escape manually and use q-
-      NAME="${${NAME##*/}//$'\e'/\\e}"    # also propagate changes to SYMLINK_TARGET below
+      NAME="${${${NAME%/}##*/}//$'\e'/\\e}"    # also propagate changes to SYMLINK_TARGET below
 
       if [[ $IS_DIRECTORY == 1 ]]; then
         if [[ $IS_WRITABLE_BY_OTHERS == 1 ]]; then
