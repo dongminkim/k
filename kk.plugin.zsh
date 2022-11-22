@@ -385,6 +385,9 @@ kk () {
               # There is a change inside the directory "$fn"
               VCS_STATUS["${fn%%/*}"]="//"
             else
+              if [[ "${st:0:1}" == "R" ]]; then
+                fn="${fn#*-> }"
+              fi
               VCS_STATUS["${fn}"]="$st"
             fi
           done
