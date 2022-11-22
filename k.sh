@@ -314,6 +314,7 @@ k () {
       statvar="stats_$i"
       typeset -A $statvar
       zstat -H $statvar -Lsn -F "%s^%d^%b^%H:%M^%Y" -- "$fn"  # use lstat, render mode/uid/gid to strings
+      if [[ $? -ne 0 ]]; then continue; fi
       STATS_PARAMS_LIST+=($statvar)
       if [[ "$o_human" != "" ]]; then
         sv=("${(@Pkv)statvar}")
