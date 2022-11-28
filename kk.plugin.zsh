@@ -202,6 +202,7 @@ kk () {
         print -r "${base_dir}:"
       fi
     fi
+
     # ----------------------------------------------------------------------------
     # Vars
     # ----------------------------------------------------------------------------
@@ -366,6 +367,7 @@ kk () {
     typeset -A VCS_STATUS=()
 
     if [[ "$o_no_vcs" == "" ]]; then
+      local old_dir="$PWD"
       if builtin cd -q "$base_dir" 2>/dev/null; then
         GIT_TOPLEVEL=$(command git rev-parse --show-toplevel 2>/dev/null)
         if [[ $? -eq 0 ]]; then
@@ -377,9 +379,10 @@ kk () {
             VCS_STATUS["$fn"]="!!"
           done
 
+          local changed=0
           command git status --porcelain . | while IFS= read ln; do
             fn="$GIT_TOPLEVEL/${ln:3}"
-            fn="${fn#$PWD/}"
+            fn="${${fn#$PWD/}:-.}"
             st="${ln:0:2}"
             if [[ "$fn" =~ .*'/'.* ]]; then
               # There is a change inside the directory "$fn"
@@ -390,10 +393,39 @@ kk () {
               fi
               VCS_STATUS["${fn}"]="$st"
             fi
+            changed=1
           done
+
+          if [[ "$o_all" != "" && "$o_almost_all" == "" && "$o_no_directory" == "" ]]; then
+            if [[ $changed -eq 1 ]]; then
+              VCS_STATUS["."]="//"
+            fi
+
+            if [[ "$PWD" =~ "$GIT_TOPLEVEL/".* ]]; then
+              # check the parent directory
+              if [[ $changed -eq 1 ]]; then
+                VCS_STATUS[".."]="//"
+              else
+                if builtin cd -q .. 2>/dev/null; then
+                  command git ls-files -o -c -i --exclude-per-directory="$GIT_TOPLEVEL/.gitignore" --directory "$PWD" | while IFS= read ln; do
+                    fn="${ln%/}"
+                    if [[ "$fn" == "." ]]; then
+                      VCS_STATUS[".."]="!!"
+                    fi
+                  done
+
+                  command git status --porcelain . | while IFS= read ln; do
+                    VCS_STATUS[".."]="//"
+                  done
+                fi
+              fi
+            else
+              VCS_STATUS[".."]="XX"
+            fi
+          fi
         fi
       fi
-      builtin cd -q - >/dev/null
+      builtin cd -q "$old_dir" >/dev/null
     fi
 
     k=1
@@ -516,27 +548,30 @@ kk () {
       # Colour the repomarker
       # --------------------------------------------------------------------------
       if (( IS_GIT_REPO != 0 )); then
-        REPOMARKER=" "
         if [[ "${VCS_STATUS["."]}" == "!!" || "${VCS_STATUS[".."]}" == "!!" ]]; then
           STATUS="!!"
+        elif [[ "${VCS_STATUS["."]}" == "??" ]]; then
+          STATUS="??"
         else
           STATUS="${VCS_STATUS["$NAME"]}"
         fi
 
-        if [[ "$STATUS" == "" ]]; then
-          REPOMARKER=$'\e[38;5;82m|\e[0m'; # not updated
+        if [[ "$STATUS" == "XX" ]]; then
+          REPOMARKER="  "; # outside repository
+        elif [[ "$STATUS" == "" ]]; then
+          REPOMARKER=$' \e[38;5;82m|\e[0m'; # not updated
         elif [[ "$STATUS" == "//" ]]; then
-          REPOMARKER=$'\e[38;5;226m+\e[0m'; # changes exist inside the directory
+          REPOMARKER=$' \e[38;5;226m+\e[0m'; # changes exist inside the directory
         elif [[ "$STATUS" == "!!"  ]]; then
-          REPOMARKER=$'\e[38;5;238m|\e[0m'; # ignored
+          REPOMARKER=$' \e[38;5;238m|\e[0m'; # ignored
         elif [[ "$STATUS" == "??" ]]; then
-          REPOMARKER=$'\e[38;5;196m+\e[0m'; # untracked
+          REPOMARKER=$' \e[38;5;196m+\e[0m'; # untracked
         elif [[ "${STATUS:1:1}" == " " ]]; then
-          REPOMARKER=$'\e[38;5;82m+\e[0m'; # index and work tree matches
+          REPOMARKER=$' \e[38;5;82m+\e[0m'; # index and work tree matches
         elif [[ "${STATUS:0:1}" == " " ]]; then
-          REPOMARKER=$'\e[38;5;196m+\e[0m'; # work tree changed since index
+          REPOMARKER=$' \e[38;5;196m+\e[0m'; # work tree changed since index
         else
-          REPOMARKER=$'\e[38;5;214m+\e[0m'; # work tree changed since index and index is updated
+          REPOMARKER=$' \e[38;5;214m+\e[0m'; # work tree changed since index and index is updated
         fi
       fi
 
@@ -571,7 +606,7 @@ kk () {
       # --------------------------------------------------------------------------
       # Display final result
       # --------------------------------------------------------------------------
-      print -r -- "$PERMISSIONS_OUTPUT $HARDLINKCOUNT $OWNER $GROUP $FILESIZE_OUT $DATE_OUTPUT $REPOMARKER $NAME$SYMLINK_TARGET"
+      print -r -- "$PERMISSIONS_OUTPUT $HARDLINKCOUNT $OWNER $GROUP $FILESIZE_OUT $DATE_OUTPUT$REPOMARKER $NAME$SYMLINK_TARGET"
 
       k=$((k+1)) # Bump loop index
     done
