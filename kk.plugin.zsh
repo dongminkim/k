@@ -375,10 +375,16 @@ kk () {
         if [[ $? -eq 0 ]]; then
           IS_GIT_REPO=1
 
-          command git ls-files -o -c -i --exclude-per-directory="$GIT_TOPLEVEL/.gitignore" --directory "$PWD" | while IFS= read ln; do
+          command git ls-files -o -i --exclude-per-directory="$GIT_TOPLEVEL/.gitignore" --directory "$PWD" | while IFS= read ln; do
             fn="${ln%/}"
             if [[ "$fn" =~ .*'/'.* ]]; then continue; fi
             VCS_STATUS["$fn"]="!!"
+          done
+
+          command git ls-files -c --deduplicate | while IFS= read ln; do
+            fn="${ln%%/*}"
+            debug "(=) fn[$fn] $base_dir/${fn}: =="
+            VCS_STATUS["$fn"]="=="
           done
 
           local changed=0
@@ -389,53 +395,55 @@ kk () {
               fn=${fn:1:-1}
             fi
             fn="$GIT_TOPLEVEL/${fn}"
-            debug "(.) fn[$fn] $base_dir/${fn}: $st"
             fn="${${${fn#$PWD/}:-.}%/}"
             st="${ln:0:2}"
-            debug "(-) $base_dir/${fn}: $st"
+            #debug "(-) $base_dir/${fn}: [$st]"
             if [[ "$fn" =~ .*'/'.* ]]; then
               # There is a change inside the directory "$fn"
-              debug "(0) $base_dir/${fn%%/*}: ${VCS_STATUS[${fn%%/*}]} -> // "
+              debug "(0) $base_dir/${fn%%/*}: [${VCS_STATUS[${fn%%/*}]}] -> [//]"
               VCS_STATUS["${fn%%/*}"]="//"
             else
               if [[ "${st:0:1}" == "R" ]]; then
                 fn="${fn#*-> }"
               fi
-              debug "(0) $base_dir/${fn}: ${VCS_STATUS[${fn}]} -> $st "
+              debug "(1) $base_dir/${fn}: [${VCS_STATUS[${fn}]}] -> [$st]"
               VCS_STATUS["${fn}"]="$st"
             fi
             changed=1
           done
 
           if [[ "$o_all" != "" && "$o_almost_all" == "" && "$o_no_directory" == "" ]]; then
-            if [[ $changed -eq 1 && -z "${VCS_STATUS["."]}" ]]; then
-              debug "(1) $base_dir: ${VCS_STATUS["."]} -> // "
-              VCS_STATUS["."]="//"
+            if [[ -z "${VCS_STATUS["."]}" ]]; then
+              if [[ $changed -eq 1 ]]; then
+                debug "(2) $base_dir: [${VCS_STATUS["."]}] -> [//]"
+                VCS_STATUS["."]="//"
+              else
+                debug "(3) $base_dir: [${VCS_STATUS["."]}] -> [==]"
+                VCS_STATUS["."]="=="
+              fi
             fi
 
             if [[ "$PWD" =~ "$GIT_TOPLEVEL/".* ]]; then
               # check the parent directory
               if [[ $changed -eq 1 ]]; then
-                debug "(2) $base_dir/..: ${VCS_STATUS[".."]} -> // "
+                debug "(4) $base_dir/..: [${VCS_STATUS[".."]}]-> [//]"
                 VCS_STATUS[".."]="//"
               else
                 if builtin cd -q .. 2>/dev/null; then
                   command git ls-files -o -c -i --exclude-per-directory="$GIT_TOPLEVEL/.gitignore" --directory "$PWD" | while IFS= read ln; do
                     fn="${ln%/}"
                     if [[ "$fn" == "." ]]; then
-                      debug "(3) $base_dir/..: ${VCS_STATUS[".."]} -> !! "
+                      debug "(5) $base_dir/..: [${VCS_STATUS[".."]}] -> [!!]"
                       VCS_STATUS[".."]="!!"
                     fi
                   done
 
                   command git status --porcelain . | while IFS= read ln; do
-                    debug "(4) $base_dir/..: ${VCS_STATUS[".."]} -> // "
+                    debug "(6) $base_dir/..: [${VCS_STATUS[".."]}] -> [//]"
                     VCS_STATUS[".."]="//"
                   done
                 fi
               fi
-            else
-              VCS_STATUS[".."]="XX"
             fi
           fi
         fi
@@ -573,9 +581,9 @@ kk () {
         fi
         debug "NAME:[$NAME](len=${#NAME}), STATUS[$STATUS]"
 
-        if [[ "$STATUS" == "XX" ]]; then
+        if [[ "$STATUS" == "" ]]; then
           REPOMARKER="  "; # outside repository
-        elif [[ "$STATUS" == "" ]]; then
+        elif [[ "$STATUS" == "==" ]]; then
           REPOMARKER=$' \e[38;5;82m|\e[0m'; # not updated
         elif [[ "$STATUS" == "//" ]]; then
           REPOMARKER=$' \e[38;5;226m+\e[0m'; # changes exist inside the directory
