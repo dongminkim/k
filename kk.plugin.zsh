@@ -2,7 +2,9 @@ zmodload zsh/datetime
 zmodload -F zsh/stat b:zstat
 
 debug () {
-  echo "🚥 $@"
+  if [[ $KK_DEBUG -gt 0 ]]; then
+    echo "🚥 $@" 1>&2
+  fi
 }
 
 kk () {
@@ -387,15 +389,19 @@ kk () {
               fn=${fn:1:-1}
             fi
             fn="$GIT_TOPLEVEL/${fn}"
+            debug "(.) fn[$fn] $base_dir/${fn}: $st"
             fn="${${${fn#$PWD/}:-.}%/}"
             st="${ln:0:2}"
+            debug "(-) $base_dir/${fn}: $st"
             if [[ "$fn" =~ .*'/'.* ]]; then
               # There is a change inside the directory "$fn"
+              debug "(0) $base_dir/${fn%%/*}: ${VCS_STATUS[${fn%%/*}]} -> // "
               VCS_STATUS["${fn%%/*}"]="//"
             else
               if [[ "${st:0:1}" == "R" ]]; then
                 fn="${fn#*-> }"
               fi
+              debug "(0) $base_dir/${fn}: ${VCS_STATUS[${fn}]} -> $st "
               VCS_STATUS["${fn}"]="$st"
             fi
             changed=1
@@ -403,23 +409,27 @@ kk () {
 
           if [[ "$o_all" != "" && "$o_almost_all" == "" && "$o_no_directory" == "" ]]; then
             if [[ $changed -eq 1 && -z "${VCS_STATUS["."]}" ]]; then
+              debug "(1) $base_dir: ${VCS_STATUS["."]} -> // "
               VCS_STATUS["."]="//"
             fi
 
             if [[ "$PWD" =~ "$GIT_TOPLEVEL/".* ]]; then
               # check the parent directory
               if [[ $changed -eq 1 ]]; then
+                debug "(2) $base_dir/..: ${VCS_STATUS[".."]} -> // "
                 VCS_STATUS[".."]="//"
               else
                 if builtin cd -q .. 2>/dev/null; then
                   command git ls-files -o -c -i --exclude-per-directory="$GIT_TOPLEVEL/.gitignore" --directory "$PWD" | while IFS= read ln; do
                     fn="${ln%/}"
                     if [[ "$fn" == "." ]]; then
+                      debug "(3) $base_dir/..: ${VCS_STATUS[".."]} -> !! "
                       VCS_STATUS[".."]="!!"
                     fi
                   done
 
                   command git status --porcelain . | while IFS= read ln; do
+                    debug "(4) $base_dir/..: ${VCS_STATUS[".."]} -> // "
                     VCS_STATUS[".."]="//"
                   done
                 fi
@@ -561,6 +571,7 @@ kk () {
             STATUS="??"
           fi
         fi
+        debug "NAME:[$NAME](len=${#NAME}), STATUS[$STATUS]"
 
         if [[ "$STATUS" == "XX" ]]; then
           REPOMARKER="  "; # outside repository
