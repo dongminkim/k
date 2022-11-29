@@ -381,7 +381,12 @@ kk () {
 
           local changed=0
           command git status --porcelain . | while IFS= read ln; do
-            fn="$GIT_TOPLEVEL/${ln:3}"
+            fn="${ln:3}"
+            if [[ "$fn" == '"'*'"' ]]; then
+              # Remove quotes(") from the file names containing special characters(', ", \, emoji, hangul)
+              fn=${fn:1:-1}
+            fi
+            fn="$GIT_TOPLEVEL/${fn}"
             fn="${${${fn#$PWD/}:-.}%/}"
             st="${ln:0:2}"
             if [[ "$fn" =~ .*'/'.* ]]; then
