@@ -427,21 +427,23 @@ kk () {
 
             if [[ "$PWD" =~ "$GIT_TOPLEVEL/".* ]]; then
               # check the parent directory
+              debug "(4) $base_dir/..: [${VCS_STATUS[".."]}]-> [==]"
+              VCS_STATUS[".."]="=="
               if [[ $changed -eq 1 ]]; then
-                debug "(4) $base_dir/..: [${VCS_STATUS[".."]}]-> [//]"
+                debug "(5) $base_dir/..: [${VCS_STATUS[".."]}]-> [//]"
                 VCS_STATUS[".."]="//"
               else
                 if builtin cd -q .. 2>/dev/null; then
                   kk-git ls-files -o -c -i --exclude-per-directory="$GIT_TOPLEVEL/.gitignore" --directory "$PWD" | while IFS= read ln; do
                     fn="${ln%/}"
                     if [[ "$fn" == "." ]]; then
-                      debug "(5) $base_dir/..: [${VCS_STATUS[".."]}] -> [!!]"
+                      debug "(6) $base_dir/..: [${VCS_STATUS[".."]}] -> [!!]"
                       VCS_STATUS[".."]="!!"
                     fi
                   done
 
                   kk-git status --porcelain . | while IFS= read ln; do
-                    debug "(6) $base_dir/..: [${VCS_STATUS[".."]}] -> [//]"
+                    debug "(7) $base_dir/..: [${VCS_STATUS[".."]}] -> [//]"
                     VCS_STATUS[".."]="//"
                   done
                 fi
