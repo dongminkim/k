@@ -1,6 +1,8 @@
 zmodload zsh/datetime
 zmodload -F zsh/stat b:zstat
 
+alias kk-git="command git -c core.quotepath=false"
+
 debug () {
   if [[ $KK_DEBUG -gt 0 ]]; then
     echo "🚥 $@" 1>&2
@@ -118,7 +120,7 @@ kk () {
 
   # Set if we're in a repo or not
   typeset -i INSIDE_WORK_TREE=0
-  if [[ $(command git rev-parse --is-inside-work-tree 2>/dev/null) == true ]]; then
+  if [[ $(kk-git rev-parse --is-inside-work-tree 2>/dev/null) == true ]]; then
     INSIDE_WORK_TREE=1
   fi
 
@@ -371,24 +373,24 @@ kk () {
     if [[ "$o_no_vcs" == "" ]]; then
       local old_dir="$PWD"
       if builtin cd -q "$base_dir" 2>/dev/null; then
-        GIT_TOPLEVEL=$(command git rev-parse --show-toplevel 2>/dev/null)
+        GIT_TOPLEVEL=$(kk-git -c core.quotepath=false rev-parse --show-toplevel 2>/dev/null)
         if [[ $? -eq 0 ]]; then
           IS_GIT_REPO=1
 
-          command git ls-files -o -i --exclude-per-directory="$GIT_TOPLEVEL/.gitignore" --directory "$PWD" | while IFS= read ln; do
+          kk-git ls-files -o -i --exclude-per-directory="$GIT_TOPLEVEL/.gitignore" --directory "$PWD" | while IFS= read ln; do
             fn="${ln%/}"
             if [[ "$fn" =~ .*'/'.* ]]; then continue; fi
             VCS_STATUS["$fn"]="!!"
           done
 
-          command git ls-files -c --deduplicate | while IFS= read ln; do
+          kk-git ls-files -c --deduplicate | while IFS= read ln; do
             fn="${ln%%/*}"
             debug "(=) fn[$fn] $base_dir/${fn}: =="
             VCS_STATUS["$fn"]="=="
           done
 
           local changed=0
-          command git status --porcelain . | while IFS= read ln; do
+          kk-git status --porcelain . | while IFS= read ln; do
             fn="${ln:3}"
             if [[ "$fn" == '"'*'"' ]]; then
               # Remove quotes(") from the file names containing special characters(', ", \, emoji, hangul)
@@ -430,7 +432,7 @@ kk () {
                 VCS_STATUS[".."]="//"
               else
                 if builtin cd -q .. 2>/dev/null; then
-                  command git ls-files -o -c -i --exclude-per-directory="$GIT_TOPLEVEL/.gitignore" --directory "$PWD" | while IFS= read ln; do
+                  kk-git ls-files -o -c -i --exclude-per-directory="$GIT_TOPLEVEL/.gitignore" --directory "$PWD" | while IFS= read ln; do
                     fn="${ln%/}"
                     if [[ "$fn" == "." ]]; then
                       debug "(5) $base_dir/..: [${VCS_STATUS[".."]}] -> [!!]"
@@ -438,7 +440,7 @@ kk () {
                     fi
                   done
 
-                  command git status --porcelain . | while IFS= read ln; do
+                  kk-git status --porcelain . | while IFS= read ln; do
                     debug "(6) $base_dir/..: [${VCS_STATUS[".."]}] -> [//]"
                     VCS_STATUS[".."]="//"
                   done
