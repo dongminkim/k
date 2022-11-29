@@ -382,7 +382,7 @@ kk () {
           local changed=0
           command git status --porcelain . | while IFS= read ln; do
             fn="$GIT_TOPLEVEL/${ln:3}"
-            fn="${${fn#$PWD/}:-.}"
+            fn="${${${fn#$PWD/}:-.}%/}"
             st="${ln:0:2}"
             if [[ "$fn" =~ .*'/'.* ]]; then
               # There is a change inside the directory "$fn"
@@ -397,7 +397,7 @@ kk () {
           done
 
           if [[ "$o_all" != "" && "$o_almost_all" == "" && "$o_no_directory" == "" ]]; then
-            if [[ $changed -eq 1 ]]; then
+            if [[ $changed -eq 1 && -z "${VCS_STATUS["."]}" ]]; then
               VCS_STATUS["."]="//"
             fi
 
@@ -548,12 +548,13 @@ kk () {
       # Colour the repomarker
       # --------------------------------------------------------------------------
       if (( IS_GIT_REPO != 0 )); then
-        if [[ "${VCS_STATUS["."]}" == "!!" || "${VCS_STATUS[".."]}" == "!!" ]]; then
-          STATUS="!!"
-        elif [[ "${VCS_STATUS["."]}" == "??" ]]; then
-          STATUS="??"
-        else
-          STATUS="${VCS_STATUS["$NAME"]}"
+        STATUS="${VCS_STATUS["$NAME"]}"
+        if [[ "$NAME" != ".." ]]; then
+          if [[ "${VCS_STATUS["."]}" == "!!" || "${VCS_STATUS[".."]}" == "!!" ]]; then
+            STATUS="!!"
+          elif [[ "${VCS_STATUS["."]}" == "??" ]]; then
+            STATUS="??"
+          fi
         fi
 
         if [[ "$STATUS" == "XX" ]]; then
